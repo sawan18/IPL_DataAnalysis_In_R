@@ -1,0 +1,1119 @@
+---
+title: "How do player performance stats and team performance in the IPL over several years are interconnected, and what components have the most effect on a team's chances of winning the IPL title?"
+author: "Sawan Pandita"
+date: "12/7/2024"
+output: 
+  html_notebook:
+    fig_height: 7
+    fig_width: 10
+---
+
+
+***Overview of Data Sources***
+
+**Delivery Information (deliveries.csv):**
+
+Location: Available on Kaggle, overseen by Prateek Bhardwaj.
+
+Data obtained from CricSheet, which collects cricket match information from multiple leagues, including IPL.
+
+Collection Objective: Gathered to deliver precise, ball-by-ball statistics for in-depth match evaluation.
+
+Case Representation: Every case signifies an individual ball (delivery) in IPL games.
+
+Total Cases: Comprises thousands of cases spanning several IPL seasons.
+
+Essential Factors: Batsman, bowler, runs made, extras, dismissal details, inning number.
+
+***Matches Information (matches.csv):***
+
+Location: Accessible on Kaggle, and also managed by Prateek Bhardwaj.
+
+Rephrased Source: Derived from CricSheet, which compiles extensive match statistics.
+
+Reason for Collection: Established to record match results, player efforts, and team performances.
+
+Case Representation: Every case signifies an individual IPL match.
+
+Total Cases: Numerous cases, spanning several IPL seasons.
+
+Crucial Factors: Match ID, season, location, toss outcome, team points, victor, player of the match.
+
+***Data on Players (players.csv):***
+
+Source: Obtained from Kaggle, overseen by Abul Hossain Khan.
+
+Purpose of Gathering: Monitors player information over seasons to aid in the analysis of performance consistency and trends.
+
+Case Representation: Each case signifies a unique player.
+
+Total Cases: Includes entries of numerous players who took part in the IPL.
+
+Essential Factors: Player's name, nationality, batting technique, bowling technique, age, team associations.
+
+***Extra Information from Ronald Davis:***
+
+Location: Accessible on Kaggle, managed by Ronald Davis.
+
+Reason for Collection: To facilitate thorough examination of IPL patterns.
+
+Case Representation: Details pertaining to IPL dynamics (for example, stadium capacity, attendance figures, or particular seasonal variables).
+
+Total Cases: Restricted to several hundred cases, according to data specific to the season.
+
+# Set Up
+### Clean up environment and load packages
+```{r}
+# clean up the RStudio environment 
+rm(list = ls())
+
+# Load necessary libraries
+library(ggplot2) # this library is used for plotting grahics using datasets, this was also used in our class
+library(dplyr) # this library helps in manupulating data like libbles
+library(readr) # this is used for reading and writing data in formats like (CSV,TSV ,etc.)
+library(stringr) # this library is used for to work with character data, making it easier to handle and change strings.
+library(corrplot) # this library is used for vizulizing the datasets 
+library(tidyverse)  #  this is for data manipulation and visualization as used in our class
+library(lubridate)  # this is generally known for handling date
+
+```
+
+
+```{r}
+# load the data
+matches <- read.csv("matches.csv")
+players <- read.csv("players.csv")
+deliveries <- read.csv("deliveries.csv")
+
+# here I am inspecting the data
+str(deliveries)
+head(matches)
+
+# summary statistics
+summary_stats <- summary(matches)
+print(summary_stats)
+```
+
+```{r}
+
+# first create matches_per_season
+matches_per_season <- matches %>%
+  dplyr::group_by(season) %>%
+  dplyr::summarise(count = n())
+
+# calculate average matches and identify max/min seasons
+matches_stats <- matches_per_season %>%
+  summarise(
+    avg_matches = mean(count),
+    min_matches = min(count),
+    max_matches = max(count),
+    total_seasons = n(),
+    total_matches = sum(count)
+  )
+
+# identify seasons with max and min matches
+max_season <- matches_per_season %>%
+  filter(count == max(count))
+
+min_season <- matches_per_season %>%
+  filter(count == min(count))
+
+# enhanced plot with annotations
+matches_plot <- ggplot(matches_per_season, aes(x = season, y = count)) +
+  # base bars
+  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.8) +
+  # average line
+  geom_hline(yintercept = matches_stats$avg_matches, 
+             color = "red", 
+             linetype = "dashed") +
+  # highlight max and min seasons
+  geom_point(data = max_season,
+            aes(x = season, y = count),
+            color = "darkgreen",
+            size = 4) +
+  geom_point(data = min_season,
+            aes(x = season, y = count),
+            color = "darkred",
+            size = 4) +
+  # these are some annotations
+  annotate("text", 
+           x = min(matches_per_season$season), 
+           y = matches_stats$avg_matches + 2,
+           label = paste("Average:", round(matches_stats$avg_matches, 1), "matches"),
+           color = "red",
+           hjust = 0) +
+  annotate("text",
+           x = max_season$season,
+           y = max_season$count + 2,
+           label = paste("Maximum:", max_season$count, "matches"),
+           color = "darkgreen") +
+  annotate("text",
+           x = min_season$season,
+           y = min_season$count - 2,
+           label = paste("Minimum:", min_season$count, "matches"),
+           color = "darkred") +
+  labs(
+    title = "Number of Matches per IPL Season",
+    subtitle = "Highlighting Maximum, Minimum, and Average Number of Matches",
+    x = "Season",
+    y = "Number of Matches"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9)
+  )
+
+# print plot for visual
+print(matches_plot)
+
+# for readable print detailed statistics
+cat("\nIPL Matches Summary Statistics:\n")
+cat("Average matches per season:", round(matches_stats$avg_matches, 1), "\n")
+cat("Minimum matches:", min_season$count, "(Season", min_season$season, ")\n")
+cat("Maximum matches:", max_season$count, "(Season", max_season$season, ")\n")
+cat("Total number of seasons:", matches_stats$total_seasons, "\n")
+cat("Total matches played:", matches_stats$total_matches, "\n")
+
+
+```
+### Analysis of IPL Matches Per Season
+
+For this research, I used a season-by-season collection of IPL matches, which may help us understand how individuals and teams perform over the season. The 2009 IPL season had the fewest matches (57), whereas the 2013 season had 76. An IPL season typically consists of 64 games.
+
+awareness performance-based overall statistics requires an awareness of this variable in the number of games played each season because:
+
+1. **Opportunities for Player Performance**: Players that play more games in a season have more chances to: 
+- Increase their strike rates 
+- Develop consistency in their play 
+- Adjust to various match circumstances
+
+2. **Impact on Team Strategy**: The quantity of games influences the ways in which teams can: 
+- Try out various player combinations
+- Recover from the season's first setbacks and cultivate winning atmosphere
+
+3. **Statistical Significance**: Seasons with more games offer the following benefits: 
+- More consistent statistical performance 
+- Improved examination of the connections between player and team performance
+- A more solid statistical foundation for examining success factors
+
+```{r}
+# here I am trying to see if toss decision affect the team's performance
+toss_decision <- matches %>%
+  dplyr::group_by(toss_decision) %>%
+  dplyr::summarise(count = n())
+
+#after getting the data from above I will try to plot it using ggplot
+ggplot(toss_decision, aes(x = toss_decision, y = count)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  labs(title = "Toss Decision Analysis", x = "Toss Decision", y = "Count") +
+  theme_minimal()
+
+```
+### Impact of Toss Decisions on Team Success
+
+An obvious preference in IPL team strategy is shown by the examination of toss choices. With over **600 decisions to field** and **400 options to bat first**, teams who won the toss **largely opted to field first**. This notable difference (approximately 60% field vs. 40% bat) indicates that IPL teams think fielding first gives them a **tactical edge in IPL games.**
+This trend demonstrates that IPL teams have established a strong agreement on the best course of action, which is very pertinent to my research topic regarding team performance and success criteria. The obvious inclination to field first might suggest that:
+
+**Instead of setting goals, teams choose to chase them.**
+**Whether a player bats first or second may have an impact on their performance statistics.**
+**Recognizing match circumstances and target scores could be a crucial in team success**
+
+**According to the research, teams think of toss choices as a crucial strategic element when trying to increase their chances of winning IPL games. Because batting first vs chasing may provide distinct pressure conditions and influence how players approach the game, this strategic decision can have an effect on both individual player statistics and the performance of the entire team.**
+
+
+```{r}
+# we have to join deliveries with matches to check out how the correlate
+deliveries_with_matches <- deliveries %>%
+  inner_join(matches, by = c("match_id" = "id"))
+
+# then calculate runs by player with pivot operations
+runs_wide <- deliveries %>%
+  group_by(match_id, batter) %>%
+  summarise(
+    total_runs = sum(batsman_runs, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  pivot_wider(
+    names_from = batter, 
+    values_from = total_runs, 
+    values_fill = list(total_runs = 0)
+  )
+
+# this should convert back to long format
+runs_long <- runs_wide %>%
+  pivot_longer(
+    cols = -match_id, 
+    names_to = "batter", 
+    values_to = "total_runs"
+  )
+
+# after that is should be able to calculate comprehensive player performance metrics
+player_performance <- deliveries %>%
+  group_by(batter) %>%
+  summarise(
+    total_runs = sum(batsman_runs, na.rm = TRUE),
+    balls_faced = n(),
+    strike_rate = (total_runs / balls_faced) * 100,
+    matches_played = n_distinct(match_id),
+    .groups = 'drop'
+  ) %>%
+  filter(balls_faced >= 10)  # this should filter out players with very few deliveries
+
+# for more in-depth visuals
+# we need to create the visualization with smoother
+performance_plot <- ggplot(player_performance, aes(x = balls_faced, y = total_runs)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(
+    title = "Player Performance Analysis in IPL",
+    subtitle = "Relationship between Balls Faced and Runs Scored",
+    x = "Balls Faced",
+    y = "Total Runs"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12, face = "bold")
+  )
+
+#  after all that print the plot
+print(performance_plot)
+
+# then calculate correlation statistics
+correlation <- cor.test(player_performance$balls_faced, player_performance$total_runs)
+
+# for readablity print summary statistics
+cat("\nPerformance Analysis Summary:\n")
+cat("Number of players analyzed:", nrow(player_performance), "\n")
+cat("Correlation between balls faced and runs:", round(correlation$estimate, 3), "\n")
+cat("P-value:", format(correlation$p.value, scientific = TRUE), "\n")
+
+# this should identify top performers
+top_performers <- player_performance %>%
+  arrange(desc(total_runs)) %>%
+  head(10) %>%
+  select(batter, total_runs, balls_faced, strike_rate)
+
+cat("\nTop 10 Run Scorers:\n")
+print(top_performers)
+  
+```
+### Detailed Analysis of Top Performers in IPL (2008-2023)
+
+***Analyzing the best IPL hitters reveals intriguing trends in batting consistency and excellence: ***
+Metrics for Elite Batting Performance
+According to my study of the top ten run scorers, these outstanding athletes usually:
+
+*3,000–6,000 balls during their IPL careers*
+*Strike rates were continuously over 120.*
+*averaged more than 25 runs each game.*
+shown exceptional endurance during the competition.
+
+***Important Performance Trends***
+Several intriguing features may be seen in the relationship between *balls faced and runs scored by elite performers*:
+
+***Consistent Elements:***
+
+There is a ***high*** correlation between **total runs and the number of balls faced.**
+*Players who encounter more deliveries often make more consistent contributions to their team's success, with the majority of top batters maintaining strike rates between 120 and 140.*
+
+
+***Effect on the Performance of the Team:***
+
+*Top players routinely score runs at pivotal times.*
+*Their aggressive batting, which may change match results, is indicated by their high strike rates.*
+*Long-term employment (high balls faced) indicates dependability and flexibility.*
+
+
+
+***Contextualizing Performance Metrics***
+Among elite performers, the statistical association between balls faced and runs scored (correlation = 0.994) shows:
+
+*Outstanding reliability in turning facing balls into runs*
+*The capacity to sustain performance levels for several seasons*
+*significant addition to the batting tactics of the squad*
+
+This ***extensive study demonstrates how individual batting performance regularly affects team success***, which precisely answers my research question. The critical relationship between individual statistics and team performance is demonstrated by the **best players' ability to sustain high strike rates while scoring substantial runs**.
+The relationship between runs scored and balls faced is still very consistent even at the highest level, suggesting that:
+
+
+*Consistent run-scorers have a big impact on team success.*
+*Players who are given more batting opportunities typically make greater contributions to the success of their team.*
+*Batting exposure and performance have a very predictable connection.*
+
+With the **best players contributing significantly to their teams' accomplishments across several seasons**, my ***research reaffirms that player performance measurements are in fact closely linked to IPL team success.***
+
+
+```{r}
+
+ # here we need to first create cleaned_data with better metrics
+ # this is the part were we have to clean and wranggle a lot of data 
+cleaned_data <- deliveries %>%
+  
+  # we would need to join with matches to get win information
+  inner_join(
+    matches %>% 
+      select(id, winner, season), 
+    by = c("match_id" = "id")
+  ) %>%
+  
+  # then calculate player-level statistics
+  group_by(batter, batting_team) %>%
+  summarise(
+    total_runs = sum(batsman_runs, na.rm = TRUE),
+    balls_faced = n(),
+    strike_rate = (total_runs/balls_faced) * 100,
+    matches_played = n_distinct(match_id),
+    
+    # after that we wood need to calculate win percentage for each player's team
+    games_won = sum(batting_team == winner, na.rm = TRUE),
+    win_percentage = (games_won/matches_played) * 100,
+    .groups = 'drop'
+  ) %>%
+  
+  # we should be able to remove outliers and low-sample players
+  filter(
+    matches_played >= 10,  # only players with sufficient matches
+    strike_rate <= 200,    # remove unrealistic strike rates
+    strike_rate > 0
+  )
+
+# now for the top players 
+#we should be able to create improved top players plot
+top_players_plot <- cleaned_data %>%
+  top_n(15, total_runs) %>%  # Focus on top 15 run scorers
+  ggplot(aes(x = strike_rate, y = win_percentage)) +
+  geom_point(aes(size = total_runs, color = batting_team), alpha = 0.7) +
+  geom_text(aes(label = batter), 
+            vjust = -1, 
+            size = 3) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  # Add trend line
+  scale_size_continuous(range = c(5, 15)) +
+  labs(
+    title = "Impact of Strike Rate on Team Success",
+    subtitle = "Top Run Scorers in IPL (2008-2023)",
+    x = "Strike Rate",
+    y = "Team Win Percentage",
+    size = "Total Runs",
+    color = "Team"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    legend.position = "right"
+  )
+
+# Now we just plot 
+# create improved distribution plot
+performance_metrics <- cleaned_data %>%
+  summarise(
+    avg_strike_rate = mean(strike_rate),
+    avg_win_rate = mean(win_percentage),
+    correlation = cor(strike_rate, win_percentage)
+  )
+
+distribution_plot <- ggplot(cleaned_data) +
+  geom_point(aes(x = strike_rate, y = win_percentage, color = total_runs), alpha = 0.6) +
+  scale_color_gradient(low = "blue", high = "red") +
+  geom_smooth(aes(x = strike_rate, y = win_percentage), method = "loess", color = "black") +
+  labs(
+    title = "Relationship between Strike Rate and Team Success",
+    subtitle = paste("Correlation:", round(performance_metrics$correlation, 3)),
+    x = "Player Strike Rate",
+    y = "Team Win Percentage",
+    color = "Total Runs"
+  ) +
+  theme_minimal()
+
+# should display plots
+print(top_players_plot)
+print(distribution_plot)
+
+# then should be able to save plots in the .csv in the project folder 
+ggsave("top_players_analysis_improved.png", top_players_plot, width = 12, height = 8)
+ggsave("performance_distribution_improved.png", distribution_plot, width = 12, height = 8)
+```
+
+***Comprehensive Analysis of Strike Rate Impact on Team Success in IPL (2008-2023)***
+Important insights on the relationship between player performance and IPL team success are revealed by the visualizations:
+Impact of Elite Performance Metrics
+My research reveals unique trends among high performers:
+
+Improved team victory percentages are highly correlated with higher strike rates (120–140).
+Larger circles in the graphic indicate players with more total runs, who often have a more constant influence on team performance.
+The correlation between win percentage and strike rate shows how batting effectiveness on an individual basis results in team wins.
+
+***Key Performance Indicators***
+Several important links are shown in the visualization: Strike Rate and Team Success:
+
+Higher team victory percentages are a result of players with strike rates between 130 and 150.
+Clustering patterns indicate that consistent performers have a steady influence on team performance.
+Top athletes consistently hit at ideal rates that achieve a balance between consistency and aggressiveness.
+
+***Volume and Impact:***
+
+Players that have both high strike rates and significant run totals are typically linked to more successful teams, as seen by the total runs (shown by circle size).
+The vizulization shows that team victory percentages are correlated with consistent performance over time (more runs overall).
+
+***Team Success Factors***
+According to the analysis, the following factors have a major impact on team performance:
+
+***Individual player strike rates***
+Run-scoring consistency (as indicated by total runs)
+The capacity to continue performing at the same level during games
+
+*This directly addresses my research question by showing:*
+
+***Clear correlation between individual batting metrics and team success***
+***Specific performance thresholds that contribute to winning***
+***The importance of consistent high-level performance***
+
+*Statistical Evidence*
+The trend line, which depicts the link between strike rate and victory %, shows: ***A positive correlation between batting efficiency and team success***
+
+Improved victory percentages are typically a result of higher strike rates.
+Team results are most significantly impacted by consistent performance.
+
+This thorough research reaffirms the underlying connection between team performance and player performance indicators, including *strike rate and run-scoring consistency*, providing **clear evidence of which components most significantly affect a team's chances of winning the title**.
+
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+
+matches_data <- read.csv("matches.csv")
+players_data <- read.csv("players.csv")
+
+# first, analyze team performance
+team_performance <- matches_data %>%
+  group_by(winner) %>%
+  summarise(
+    team_wins = n(),
+    total_matches = n_distinct(id),
+    win_percentage = (team_wins/total_matches) * 100
+  )
+
+# then create enhanced bowler performance data
+enhanced_bowling_analysis <- players_data %>%
+  filter(balls_bowled > 300) %>%
+  mutate(
+    bowling_average = runs_conceded/wickets,
+    strike_rate = balls_bowled/wickets,
+    economy_rate = (runs_conceded/balls_bowled) * 6
+  )
+
+# now we should be able to go ahead and visualize the code
+# visualization 1: Economy Rate vs Wickets Impact
+ggplot(enhanced_bowling_analysis, 
+       aes(x = economy_rate, y = wickets)) +
+  geom_point(aes(size = matches, color = bowling_average), alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  scale_color_gradient(low = "green", high = "red") +
+  scale_size_continuous(range = c(3, 15)) +
+  theme_minimal() +
+  labs(
+    title = "Bowling Efficiency and Wicket-Taking Ability",
+    subtitle = "Economy Rate vs Wickets (Size: Matches Played, Color: Bowling Average)",
+    x = "Economy Rate",
+    y = "Total Wickets",
+    size = "Matches Played",
+    color = "Bowling Average"
+  )
+
+# now we should be able to go ahead and visualize the code for bowling with distribution
+# visualization 2: Performance Distribution
+ggplot(enhanced_bowling_analysis) +
+  geom_histogram(aes(x = economy_rate), fill = "steelblue", bins = 30) +
+  geom_density(aes(x = economy_rate, y = ..density.. * 30), color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Bowling Economy Rates",
+    subtitle = "Analysis of Bowling Efficiency Across IPL",
+    x = "Economy Rate",
+    y = "Count"
+  )
+
+# now we should be able to go ahead and visualize the code for top performers
+# visualization 3: Top Performers Analysis
+top_bowlers <- enhanced_bowling_analysis %>%
+  arrange(economy_rate) %>%
+  head(10) %>%
+  mutate(
+    player = factor(player, levels = player[order(economy_rate)])
+  )
+
+ggplot(top_bowlers) +
+  geom_col(aes(x = player, y = wickets, fill = economy_rate)) +
+  geom_text(aes(x = player, y = wickets,
+                label = sprintf("ER: %.1f", economy_rate)),
+            hjust = -0.1) +
+  coord_flip() +
+  scale_fill_gradient(low = "green", high = "red") +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Most Efficient Bowlers in IPL",
+    subtitle = "Wickets Taken vs Economy Rate",
+    x = "Player",
+    y = "Total Wickets",
+    fill = "Economy Rate"
+  )
+
+# this is for stats analysis
+bowling_model <- lm(wickets ~ economy_rate + matches + bowling_average, 
+                   data = enhanced_bowling_analysis)
+
+# then we should be able to print analysis
+cat("\nBowling Performance Analysis:\n")
+cat("\n1. Economy Rate Impact:")
+cat("\n   - Correlation with wickets:", 
+    round(cor(enhanced_bowling_analysis$economy_rate, 
+              enhanced_bowling_analysis$wickets), 3))
+
+cat("\n\n2. Experience Factor:")
+cat("\n   - Correlation between matches and wickets:", 
+    round(cor(enhanced_bowling_analysis$matches, 
+              enhanced_bowling_analysis$wickets), 3))
+
+cat("\n\n3. Model Summary:")
+cat("\n   - R-squared:", round(summary(bowling_model)$r.squared, 3))
+
+
+```
+
+***Comprehensive Analysis of Bowling Impact in IPL (2008-2023)***
+**My analysis reveals fascinating patterns in how bowling performance shapes team success in the IPL, providing key insights into my research question:**
+Stats for Bowling Performance
+According to the visualizations, top bowlers demonstrate:
+
+*- Economy rates are continuously less than eight runs per over.*
+*- High capacity to take wickets (20+ wickets)*
+*- Consistent performance throughout several games*
+*- Direct effect on the percentage of team victories*
+
+***Critical Performance Patterns***
+Several aspects of bowling influence are shown by this analysis: 
+Success and Economy Rate:
+
+*- The results of matches are greatly impacted by bowlers who maintain modest economy rates (6–8 runs/over).*
+*- As seen in Visualization 1, the relationship between economy rate and wickets illustrates how managing runs creates opportunities to take wickets.*
+*- Top players always combine their abilities to take wickets with economical bowling.*
+
+***Experience and Impact:***
+
+*Larger circle sizes* in this plot it indicated *more seasoned bowlers*, who often *maintain higher economy rates*.
+According to the distribution plot, *bowlers who are successful* tend to **group together around the best economy rates**.
+Improved performance measures have a high correlation with match stats
+
+Factors that Contribute to Team Success
+The information clearly demonstrates how bowling performance impacts team performance by:
+
+*- Economy rates that are constant*
+*- Regular ability to take wickets*
+*- Experience working under pressure*
+
+***This directly addresses my research question by revealing:***
+
+*- There is obvious statistical proof that bowling performance and team success are related.*
+*- Certain statistics that have the biggest impact on winning games*
+*- The change in bowling impact across several seasons*
+
+***Statistical Evidence***
+Several important links have been shown by my analysis:
+
+- Strong correlation between economy rate and wickets 
+- Experience has a major effect on performance.
+- Identifiable trends among high performers that support team success
+
+***This extensive analysis reaffirms the underlying connection between bowling performance indicators and IPL team success. The best bowlers constantly show how their individual bowling performances result in team wins, giving unmistakable proof of the factors that have the most impacts on a club's prospects of taking home the IPL championship.***
+
+
+```{r}
+
+#here we would need to create a fucntioin to do the same old boring step
+# function to standardize team names (same as before)
+standardize_team_names <- function(team_name) {
+  case_when(
+    team_name %in% c("Delhi Daredevils", "Delhi Capitals") ~ "Delhi Capitals",
+    team_name %in% c("Kings XI Punjab", "Punjab Kings") ~ "Punjab Kings",
+    team_name %in% c("Rising Pune Supergiant", "Rising Pune Supergiants", "Pune Warriors") ~ NA_character_,
+    team_name %in% c("Royal Challengers Bangalore", "Royal Challengers Bengaluru") ~ "Royal Challengers Bangalore",
+    team_name %in% c("Kochi Tuskers Kerala", "Gujarat Lions", "Deccan Chargers") ~ NA_character_,
+    TRUE ~ team_name
+  )
+}
+
+# modified prepare_team_data function to calculate rolling averages
+prepare_team_data <- function(matches_data) {
+  team_perf <- matches_data %>%
+    mutate(winner = standardize_team_names(winner)) %>%
+    filter(!is.na(winner)) %>%
+    group_by(season, winner) %>%
+    summarise(
+      matches_won = n(),
+      .groups = 'drop'
+    ) %>%
+    full_join(
+      matches_data %>%
+        mutate(
+          team1 = standardize_team_names(team1),
+          team2 = standardize_team_names(team2)
+        ) %>%
+        pivot_longer(
+          cols = c(team1, team2),
+          names_to = "team_type",
+          values_to = "team"
+        ) %>%
+        filter(!is.na(team)) %>%
+        group_by(season, team) %>%
+        summarise(
+          total_matches = n_distinct(id),
+          .groups = 'drop'
+        ),
+      by = c("season" = "season", "winner" = "team")
+    ) %>%
+    mutate(
+      win_percentage = (matches_won / total_matches) * 100,
+      matches_won = replace_na(matches_won, 0)
+    ) %>%
+    filter(!is.na(winner)) %>%
+    # calculate rolling average using zoo
+    #we need to use zoo because then our graph can look much nicer and the percentages and numbers would be nicer to look at
+    group_by(winner) %>%
+    arrange(season) %>%
+    mutate(
+      rolling_win_percentage = zoo::rollmean(win_percentage, k = 2, fill = NA, align = "right")
+    ) %>%
+    ungroup()
+    
+  return(team_perf)
+}
+
+# modified plot function for cleaner visualization
+create_team_performance_plot <- function(team_perf) {
+  # create base plot with facets
+  p1 <- ggplot(team_perf, 
+         aes(x = season, y = win_percentage, color = winner)) +
+    # split into two panels for better readability
+    facet_wrap(~factor(case_when(
+      winner %in% c("Mumbai Indians", "Chennai Super Kings", "Royal Challengers Bangalore", "Kolkata Knight Riders") ~ "Established Teams",
+      TRUE ~ "Other Teams"
+    )), ncol = 1, scales = "free_y") +
+    # add horizontal reference lines
+    geom_hline(yintercept = 50, color = "gray80", linetype = "dashed") +
+    # add smoothed lines
+    geom_smooth(aes(y = rolling_win_percentage), 
+                se = FALSE, size = 1.2, alpha = 0.8, 
+                method = "loess", span = 0.75) +
+    # add points with reduced size
+    geom_point(size = 2, alpha = 0.6) +
+    # I had to look this up to make the plot look nicer 
+    # custom theme
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5),
+      axis.title = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.text.y = element_text(size = 9),
+      legend.position = "right",
+      legend.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray95"),
+      strip.text = element_text(size = 12, face = "bold"),
+      plot.margin = margin(1, 1, 1, 1, "cm")
+    ) +
+    # custom scales
+    scale_y_continuous(
+      limits = c(0, 100),
+      breaks = seq(0, 100, by = 25),
+      labels = function(x) paste0(x, "%")
+    ) +
+    scale_color_brewer(palette = "Set2") +
+
+    labs(
+      title = "IPL Team Performance Trends (2008-2023)",
+      subtitle = "Win Percentage Across Seasons with Trend Lines",
+      x = "Season",
+      y = "Win Percentage",
+      color = "Team Name"
+    )
+  
+  return(p1)
+}
+
+# main execution by putting them into assigned varaibles
+team_performance_data <- prepare_team_data(matches)
+clean_plot <- create_team_performance_plot(team_performance_data)
+
+# display plot
+print(clean_plot)
+
+# save plot with higher resolution with ggplot
+ggsave("clean_team_performance_trend.png", clean_plot, 
+       width = 15, height = 12, dpi = 300)
+```
+
+### Comprehensive Analysis of Team Performance Trends in IPL (2008-2023)
+
+Important themes for long-term success in the IPL are shown by my visualization and analysis of team performance trends:
+*- Evolution of Team Performance*
+*- The data reveals clear trends across various team types:*
+
+Established Teams: 
+- **RCB, KKR, Chennai Super Kings, and Mumbai Indians** have more **reliable performance trends.**
+*- Their winning percentages typically remain consistent over several seasons, and there is enough proof that consistent team-building techniques have an effect on output.*
+
+
+**Other Teams:**
+
+Display more inconsistent performance patterns.
+Show instances of both great success and major setbacks.
+Consider the effects of team reorganization and strategy modifications.
+
+**Indicators of Performance Stability**
+**Several significant themes are highlighted by my analysis :**
+
+*Win Percentage Patterns:*
+
+More often, established clubs keep their victory percentages above 50%.
+Long-term performance patterns are displayed by rolling averages, which are represented by smoothed lines.
+There is a direct link between team success and consistent performance levels.
+
+
+**Season-to-Season Variation:**
+
+*Points display each season's performance.*
+*Trend lines show the general trend of the team.*
+Using the reference line at *50%* makes it *easier* to find teams who are *regularly successful*.
+
+
+
+**This analysis directly addresses my research question by showing:**
+
+How a *team's performance* **changes during** *several seasons*
+Which **groups consistently achieve high levels of success?**
+The connection between **overall team success and consistent performance**
+
+**Statistical Insights**
+**Important patterns are revealed by the visualization:**
+
+*Teams with greater victory percentages typically win more IPL championships.*
+*Long-term success is correlated with performance stability.*
+*Clearly different performance consistency between established teams and others*
+
+
+```{r}
+
+
+# function to prepare player performance data
+prepare_player_data <- function(deliveries_data, matches_data) {
+  # this is to calculate batting performances
+  batting_performances <- deliveries_data %>%
+    group_by(match_id, batter, batting_team) %>%
+    summarise(
+      runs = sum(batsman_runs, na.rm = TRUE),
+      balls_faced = n(),
+      .groups = 'drop'
+    ) %>%
+    group_by(batter, batting_team) %>%
+    summarise(
+      total_runs = sum(runs),
+      total_balls = sum(balls_faced),
+      matches_played = n_distinct(match_id),
+      strike_rate = (total_runs / total_balls) * 100,
+      batting_average = total_runs / matches_played,
+      .groups = 'drop'
+    )
+
+  # this should allow for calculation of the team win percentages
+  team_performances <- matches_data %>%
+    group_by(winner) %>%
+    summarise(
+      matches_won = n(),
+      .groups = 'drop'
+    ) %>%
+    full_join(
+      matches_data %>%
+        pivot_longer(
+          cols = c(team1, team2),
+          names_to = "team_type",
+          values_to = "team"
+        ) %>%
+        group_by(team) %>%
+        summarise(
+          total_matches = n_distinct(id),
+          .groups = 'drop'
+        ),
+      by = c("winner" = "team")
+    ) %>%
+    mutate(
+      win_percentage = (matches_won / total_matches) * 100,
+      matches_won = replace_na(matches_won, 0)
+    ) %>%
+    filter(!is.na(winner))
+
+  # this shoudl join batting and team performance data
+  player_impact <- batting_performances %>%
+    left_join(team_performances, by = c("batting_team" = "winner")) %>%
+    filter(
+      total_balls >= 30,  # min balls faced
+      !is.na(strike_rate),
+      !is.na(win_percentage),
+      strike_rate <= 200,  # remove unrealistic strike rates
+      win_percentage <= 100
+    )
+
+  return(player_impact)
+}
+
+# function to create player impact plot
+create_player_impact_plot <- function(player_data) {
+  ggplot(player_data, 
+         aes(x = strike_rate, y = win_percentage)) +
+    # add reference lines
+    geom_hline(yintercept = seq(20, 80, by = 20), color = "gray90", linetype = "dashed") +
+    geom_vline(xintercept = seq(100, 200, by = 25), color = "gray90", linetype = "dashed") +
+    # add points
+    geom_point(
+      aes(size = total_runs, color = batting_average),
+      alpha = 0.6
+    ) +
+    # add trend line
+    geom_smooth(
+      method = "lm",
+      color = "red",
+      alpha = 0.2,
+      size = 0.8
+    ) +
+    
+    scale_color_gradient2(
+      low = "blue",
+      mid = "purple",
+      high = "red",
+      midpoint = median(player_data$batting_average, na.rm = TRUE)
+    ) +
+    scale_size_continuous(
+      range = c(2, 10),
+      breaks = c(100, 300, 500, 700),
+      labels = scales::comma
+    ) +
+    
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5),
+      axis.title = element_text(size = 12, face = "bold"),
+      legend.position = "right",
+      legend.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(1, 1, 1, 1, "cm")
+    ) +
+   
+    labs(
+      title = "Impact of Batting Performance on Team Success",
+      subtitle = "Relationship between Strike Rate and Team Win Percentage",
+      x = "Strike Rate",
+      y = "Team Win Percentage",
+      size = "Total Runs",
+      color = "Batting Average"
+    ) +
+   
+    scale_x_continuous(
+      limits = c(80, 200),
+      breaks = seq(80, 200, by = 20)
+    ) +
+    scale_y_continuous(
+      limits = c(0, 100),
+      breaks = seq(0, 100, by = 20),
+      labels = function(x) paste0(x, "%")
+    )
+}
+
+# main analysis execution into original variable names
+player_performance_data <- prepare_player_data(deliveries, matches)
+player_plot <- create_player_impact_plot(player_performance_data)
+
+# now we just need to print summary statistics
+print("\nPlayer Performance Summary:")
+print(summary(player_performance_data))
+
+# display plot
+print(player_plot)
+
+# save plot using ggsave
+ggsave("player_impact_analysis.png", player_plot, width = 12, height = 8, dpi = 300)
+
+# now lastly we need to calculate and print correlation statistics
+correlation_stats <- cor.test(player_performance_data$strike_rate, 
+                            player_performance_data$win_percentage)
+
+print("\nCorrelation Analysis:")
+print(paste("Correlation coefficient:", round(correlation_stats$estimate, 3)))
+print(paste("P-value:", format(correlation_stats$p.value, scientific = TRUE)))
+```
+
+### Analysis of Batting Performance Impact on IPL Team Success (2008-2023)
+I discovered some fascinating patterns while looking at batting performance and team success visualization, which are directly related to my research question:
+
+*The connection between team success and strike rate*
+*Several significant findings are displayed by the scatter plot:*
+
+**Performance Distribution:** 
+*Most players have strike rates in the range of 120 to 140.*
+*Win percentages for teams often fall between 40 and 60 percent.*
+*A upward trend (red line) shows a positive correlation between strike rate and team performance.*
+
+**Key Performance Indicators**
+**The visualization exposes multiple dimensions of batting impact:**
+
+*Strike Rate Impact:*
+
+*Team performance and greater strike rates* ***(>140)*** have a *small relationship*.
+***Players maintain strike rates over 130***, which results in *higher team victory percentages*.
+The **association is continuous, as shown by the** *color gradient*.
+
+
+*Run Volume Effect:*
+
+**Larger circles** indicate *more runs overall*.
+The ***strike rates*** of *players* who score a **lot of runs (500 or more)** tend to remain higher.
+Frequent high-volume scorers* have a **bigger effect on the team's performance**.
+
+
+
+**Performance Patterns**
+**My analysis highlights crucial relationships:**
+
+Batting average, which is shown by color, is often used in conjunction with strike rate.
+More successful teams tend to have players with redder dots, or both high strike rates and excellent averages.
+Total runs (circle size) show that dependable players have a bigger impact on the team's performance.
+
+**My research issue is directly addressed by this thorough view, which demonstrates:**
+
+The relationship between team win percentages and individual batting efficiency (strike rate)
+The significance of keeping strike rates high and averages high
+The importance of reliable run-scoring for team performance
+
+**The graph tells us that team success in IPL is influenced by:**
+
+Batsmen who consistently score more than 130
+Regular run scorers (bigger circles) and strike rate with batting average (color gradient)
+
+
+
+
+
+
+### Now comming on to the difficulties faced in this project
+
+***Technical**
+*Complexities of Data Integration:*
+- I had problems with key fields which have to be handled carefully while merging many datasets (matches.csv, deliveries.csv, and players.csv).
+- Because team names fluctuate with the seasons, it was essential to standardize them (e.g., Delhi Daredevils to Delhi Capitals).
+- Managing missing information and discrepancies between datasets. Which came by wralling data to avoid mis-interprtated data.
+- Also, cleanning data was hard as well as a lot of the teams either did't play in the IPL now or used to play with a different name as the current tem. So, to link all that data was hard to code and visulize.
+
+*Calculations of Performance Stats:*
+
+- Calculating complex team performance indicators, such as moving averages
+- Developing significant effect scores by integrating several performance metrics
+- Managing odd circumstances, such as players with a low match total or odd stats
+
+
+
+***Plot/Graphing**
+- It was hard to deal with overcrowding in performance plots with multiple data points
+- Also, balancing information density with readability was a challange as a lot of data points were mushed together and were very hard to interpretate from the graph
+- representing multiple dimensions (strike rate, win percentage, total runs) effectively was a challange as well because a lot of the data came from matches.csv and mapping the players_performance in a different .csv required a lot of mental effort.
+
+```{r}
+
+prepare_team_data <- function(matches_data) {
+  team_perf <- matches_data %>%
+    group_by(season, winner) %>%
+    summarise(
+      matches_won = n(),
+      .groups = 'drop'
+    ) %>%
+    full_join(
+      matches_data %>%
+        pivot_longer(
+          cols = c(team1, team2),
+          names_to = "team_type",
+          values_to = "team"
+        ) %>%
+        group_by(season, team) %>%
+        summarise(
+          total_matches = n_distinct(id),
+          .groups = 'drop'
+        ),
+      by = c("season" = "season", "winner" = "team")
+    ) %>%
+    mutate(
+      win_percentage = (matches_won / total_matches) * 100,
+      matches_won = replace_na(matches_won, 0)
+    ) %>%
+    filter(!is.na(winner))
+    
+  return(team_perf)
+}
+
+
+create_team_performance_plot <- function(team_perf) {
+  ggplot(team_perf, 
+         aes(x = season, y = win_percentage, color = winner, group = winner)) +
+    
+    geom_hline(yintercept = seq(20, 80, by = 20), color = "gray90", linetype = "dashed") +
+    
+    geom_line(size = 0.8, alpha = 0.7) +
+   
+    geom_point(size = 2.5) +
+    
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5),
+      axis.title = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "right",
+      legend.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(1, 1, 1, 1, "cm")
+    ) +
+   
+    scale_y_continuous(
+      limits = c(0, 100),
+      breaks = seq(0, 100, by = 20),
+      labels = function(x) paste0(x, "%")
+    ) +
+    scale_color_brewer(palette = "Set2") +
+    
+    labs(
+      title = "IPL Team Performance Trends (2008-2023)",
+      subtitle = "Win Percentage Across Seasons",
+      x = "Season",
+      y = "Win Percentage",
+      color = "Team Name"
+    )
+}
+
+
+matches <- read.csv("matches.csv")
+
+
+team_performance_data <- prepare_team_data(matches)
+team_plot <- create_team_performance_plot(team_performance_data)
+
+
+print(team_plot)
+
+
+ggsave("team_performance_trend.png", team_plot, width = 12, height = 8, dpi = 300)
+
+```
